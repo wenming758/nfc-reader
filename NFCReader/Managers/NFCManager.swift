@@ -133,11 +133,14 @@ final class NFCManager: NSObject, ObservableObject {
     // MARK: - 会话创建
 
     private func startTagSession() {
-        let session = NFCTagReaderSession(
+        guard let session = NFCTagReaderSession(
             pollingOption: [.iso14443, .iso15693, .iso18092],
             delegate: self,
             queue: nil
-        )
+        ) else {
+            state = .failure("无法启动 NFC 会话，请检查系统设置中的 NFC 权限")
+            return
+        }
         session.alertMessage = "请将卡片贴近 iPhone 顶部"
         tagSession = session
         state = .scanning
@@ -194,7 +197,13 @@ final class NFCManager: NSObject, ObservableObject {
         case .feliCa(let feliCa):
             uid = feliCa.currentIDm.hexString(separator: " ")
             cardType = .feliCa
-            details.append(String(format: "系统码：0x%04X", feliCa.currentSystemCode))
+            let systemCode = feliCa.currentSystemCode
+            if systemCode.count >= 2 {
+                let value = systemCode.prefix(2).reduce(UInt16(0)) { ($0 << 8) | UInt16($1) }
+                details.append(String(format: "系统码：0x%04X", value))
+            } else {
+                details.append("系统码：\(systemCode.hexString())")
+            }
         @unknown default:
             throw NFCScanError.unsupportedTag
         }
